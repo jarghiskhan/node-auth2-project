@@ -1,8 +1,11 @@
 const router = require("express").Router();
-const { checkUsernameExists, validateRoleName } = require('./auth-middleware');
+const bcrypt = require("bcryptjs");
+const { checkUsernameExists, validateRoleName } = require("./auth-middleware");
+const Users = require("../users/users-model");
+const jwt = require("jsonwebtoken")
 const { JWT_SECRET } = require("../secrets"); // use this secret!
 
-router.post("/register", validateRoleName, (req, res, next) => {
+router.post("/register", validateRoleName, async (req, res, next) => {
   /**
     [POST] /api/auth/register { "username": "anna", "password": "1234", "role_name": "angel" }
 
@@ -14,8 +17,18 @@ router.post("/register", validateRoleName, (req, res, next) => {
       "role_name": "angel"
     }
    */
+  try {
+    const hash = bcrypt.hashSync(req.body.password, 10);
+    const newUser = await Users.add({
+      username: req.body.username,
+      password: hash,
+      role_name: req.role_name,
+    });
+    res.status(201).json(newUser);
+  } catch (e) {
+    res.status(500).json(`Server error: ${e.message}`);
+  }
 });
-
 
 router.post("/login", checkUsernameExists, (req, res, next) => {
   /**
@@ -37,6 +50,34 @@ router.post("/login", checkUsernameExists, (req, res, next) => {
       "role_name": "admin" // the role of the authenticated user
     }
    */
+  try {
+    const verified = bcrypt.compareSync(
+      req.body.password,
+      req.userData.password
+    );
+    if (verified) {
+      const user = req.userData;
+      const token = makeToken(user);
+      const userName = user.username;
+      res.status(200).json({ message: `${userName} is back`, token });
+    } else {
+      res.status(401).json({ message: "invalid credentials" });
+    }
+  } catch (e) {
+    res.status(500).json(`login Server error: ${e}`);
+  }
 });
+
+function makeToken(user){
+  const payload={
+    subject: user.user_id,
+    username: user.username,
+    role_name: user.role_name
+  }
+  const options = {
+    expiresIn:"1d"
+  }
+  return jwt.sign(payload,JWT_SECRET,options)
+}
 
 module.exports = router;
