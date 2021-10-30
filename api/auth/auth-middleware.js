@@ -1,5 +1,6 @@
 const { JWT_SECRET } = require("../secrets"); // use this secret!
 const { findBy } = require("../users/users-model");
+const jwt = require("jsonwebtoken")
 const restricted = (req, res, next) => {
   /*
     If the user does not provide a token in the Authorization header:
@@ -16,6 +17,19 @@ const restricted = (req, res, next) => {
 
     Put the decoded token in the req object, to make life easier for middlewares downstream!
   */
+    const token = req.headers.authorization
+    if(!token){
+      res.status(401).json({message:"Token required"})
+    }else{
+      jwt.verify(token, JWT_SECRET, (err, decoded)=>{
+        if(err){
+          res.status(401).json({message:"Token invalid"})
+        }else{
+          req.decodedToken = decoded
+          next()
+        }
+      })
+    }
 };
 
 const only = (role_name) => (req, res, next) => {
@@ -29,6 +43,11 @@ const only = (role_name) => (req, res, next) => {
 
     Pull the decoded token from the req object, to avoid verifying it again!
   */
+ if(req.decodedToken.role_name !== role_name){
+   res.status(403).json({message:"This is not for you"})
+ } else{
+   next()
+ }
 };
 
 const checkUsernameExists = async (req, res, next) => {
@@ -77,7 +96,6 @@ const validateRoleName = (req, res, next) => {
     next();
   } else {
     role_name = role_name.trim();
-    console.log(role_name, role_name.length);
     if (role_name.length === 0) {
       req.role_name = "student";
       next();
